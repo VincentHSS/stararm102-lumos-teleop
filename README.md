@@ -1,6 +1,6 @@
 # StarArm 102 → Lumos Python 遥操作
 
-使用 StarArm 102 主臂实时控制 Lumos 单臂。
+使用 StarArm 102 主臂实时控制 Lumos 单臂
 
 程序通过 StarArm UART 和 Lumos CAN 通信，不依赖 LeRobot。客户操作步骤见 [操作指南](docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx)。
 
