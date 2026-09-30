@@ -1,14 +1,16 @@
 # StarArm 102 → Lumos Python 遥操作
 
-使用 StarArm 102 主臂实时控制 Lumos 单臂。程序通过 StarArm UART 和 Lumos CAN 通信，不依赖 LeRobot。客户操作步骤见 [`docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx`](docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx)。
+使用 StarArm 102 主臂实时控制 Lumos 单臂。
+
+程序通过 StarArm UART 和 Lumos CAN 通信，不依赖 LeRobot。客户操作步骤见 [操作指南](docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx)。
 
 ## 硬件与环境
 
-- Ubuntu 20.04、22.04 或 24.04 主机
-- Python 3.10（推荐）
+- Ubuntu 20.04 / 22.04 / 24.04 主机
+- Python 3.10（推荐版本）
 - StarArm 102 主臂及 UART/USB 连接
 - Lumos 单臂及已配置为 1 Mbps 的 CAN 接口（默认 `can0`）
-- `git`、`sudo` 权限，以及可访问 GitHub 和 PyPI 的网络
+- `git` 和 `sudo` 权限，以及可访问 GitHub 和 PyPI 的网络
 
 ## 安装
 
@@ -29,7 +31,7 @@ bash scripts/install_ubuntu.sh
 
 脚本会安装 Lumos SDK 所需的系统构建依赖、StarArm Python 包和 Lumos Python 依赖；然后自动从 Lumos 官方仓库下载 StarTouch SDK 到项目目录 `.dependencies/startouch_sdk` 并完成安装。客户不必手动打开 Lumos 安装文档或进入 SDK 源码目录。脚本使用当前激活的 Python 环境；首次运行需要联网及 `sudo` 权限。
 
-### 手动安装（排错时使用）
+### 手动安装（用于排错）
 
 在项目根目录、已激活的 Python 3.10 环境中依次执行。以下命令和一键脚本执行相同的依赖安装：
 
