@@ -56,7 +56,7 @@ python -m pip install .dependencies/startouch_sdk
 python -c "import serial, fashionstar_uart_sdk; from startouchclass import SingleArm; print('SDK OK')"
 ```
 
-> Lumos SDK 源码由安装脚本从 [Lumos 官方仓库](https://github.com/lumos-open/startouch_sdk) 获取。上游仓库未声明再分发许可证，因此本项目不复制或打包其 SDK 源码。
+> 安装脚本会自动从 [Lumos 官方 StarTouch SDK 仓库](https://github.com/lumos-open/startouch_sdk) 获取并安装 SDK。
 
 ## CAN 接口
 
