@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""StarArm 102 leader -> Lumos StarTouch single-arm Python teleoperation.
+"""Star Arm 102 leader -> Lumos StarTouch single-arm Python teleoperation.
 
 Run --calibrate first. Calibration records a neutral pose and the leader's
 intended joint ranges. It never commands robot motion. Teleoperation is
@@ -72,8 +72,8 @@ def print_joint_ranges(range_min: Sequence[float], range_max: Sequence[float]) -
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="StarArm 102 leader -> Lumos arm teleoperation")
-    parser.add_argument("--leader-port", default="/dev/ttyUSB0", help="StarArm 102 leader UART port")
+    parser = argparse.ArgumentParser(description="Star Arm 102 leader -> Lumos arm teleoperation")
+    parser.add_argument("--leader-port", default="/dev/ttyUSB0", help="Star Arm 102 leader UART port")
     parser.add_argument("--can", default="can0", help="Lumos CAN interface")
     parser.add_argument("--joint-map", type=parse_joint_map, default=(0, 1, 2, 3, 4, 5),
                         help="StarArm servo IDs corresponding to Lumos joints 1..6")
@@ -114,9 +114,9 @@ def main() -> int:
         leader = uservo.UartServoManager(leader_uart)
         if args.calibrate:
             print("\n╔══════════════════════════════════════════════════════╗")
-            print("║       StarArm 102 → Lumos  校准向导                 ║")
+            print("║       Star Arm 102 → Lumos  校准向导                 ║")
             print("╚══════════════════════════════════════════════════════╝")
-            print("请先将 StarArm102 与 Lumos 摆到对应的遥操作参考姿态。")
+            print("请先将 Star Arm 102 与 Lumos 摆到对应的遥操作参考姿态。")
             print("Lumos 连接时会使能电机；确认急停可用、工作区域畅通。")
             input("准备好后按 Enter 连接并记录参考姿态……")
         lumos = SingleArm(can_interface_=args.can, gripper=args.gripper, enable_fd_=False)

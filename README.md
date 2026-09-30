@@ -1,14 +1,14 @@
-# StarArm 102 → Lumos Python 遥操作
+# Star Arm 102 → Lumos Python 遥操作
 
-使用 StarArm 102 主臂实时控制 Lumos 单臂
+使用 Star Arm 102 主臂实时控制 Lumos 单臂
 
-程序通过 StarArm UART 和 Lumos CAN 通信，不依赖 LeRobot。客户操作步骤见 [操作指南](docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx)。
+程序通过 Star Arm UART 和 Lumos CAN 通信，不依赖 LeRobot。客户操作步骤见 [操作指南](docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx)。
 
 ## 硬件与环境
 
 - Ubuntu 20.04 / 22.04 / 24.04 主机
 - Python 3.10（推荐版本）
-- StarArm 102 主臂及 UART/USB 连接
+- Star Arm 102 主臂及 UART/USB 连接
 - Lumos 单臂及已配置为 1 Mbps 的 CAN 接口（默认 `can0`）
 - `git` 和 `sudo` 权限，以及可访问 GitHub 和 PyPI 的网络
 
