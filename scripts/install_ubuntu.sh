@@ -45,6 +45,11 @@ else
   echo "使用已下载的 SDK：$SDK_DIR"
 fi
 
+if [[ ! -f "$SDK_DIR/src/config/robot_kinematics.yaml" ]]; then
+  echo "SDK 缺少配置：$SDK_DIR/src/config/robot_kinematics.yaml。请检查 SDK 下载是否完整。" >&2
+  exit 1
+fi
+
 sudo apt-get update
 sudo apt-get install -y \
   build-essential \
@@ -64,3 +69,4 @@ sudo apt-get install -y \
 "$PYTHON_BIN" -c "import serial, fashionstar_uart_sdk; from startouchclass import SingleArm; print('StarArm 与 Lumos SDK 安装成功')"
 echo "安装完成。遥操作脚本：$PROJECT_DIR/stararm102_lumos_teleop.py"
 echo "Lumos SDK 源码：$SDK_DIR"
+echo "Lumos 运行配置：$SDK_DIR/src/config/robot_kinematics.yaml（请保留 SDK 源码目录）"
