@@ -6,6 +6,8 @@ intended joint ranges. It never commands robot motion. Teleoperation is
 read-only for Lumos unless --execute is supplied. The HD leader button is
 enabled by default and controls leader holding torque even in preview mode.
 Use --button-disable for a leader without the HD button board.
+Execute mode also enables automatic Leader damping/stall holding through
+lumos_auto_feedback.py; --feedback-disable restores the original button-only mode.
 
 IMPORTANT: This is a starting bridge, not a verified joint mapping. Confirm
 joint order and direction with the arms clear and hardware E-stop reachable.
@@ -16,6 +18,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import math
 import os
 import sys
@@ -24,6 +27,8 @@ import time
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Sequence
+
+from lumos_auto_feedback import FeedbackConfig, LumosAutoFeedback
 
 LEADER_JOINT_IDS = (0, 1, 2, 3, 4, 5)
 CALIBRATION_VERSION = 1
@@ -40,6 +45,7 @@ STATUS_RATE_HZ = 5.0      # 状态打印频率，避免每帧刷新终端
 CONTROL_RATE_HZ = 50.0     # 读主臂/更新 Lumos 目标的循环频率
 HD_BUTTON_ENABLED = True  # 默认开启 HD 实体按钮悬停功能
 HD_BUTTON_ID = 7          # HD 按钮板 ID；不参与关节/夹爪映射
+AUTO_FEEDBACK_CONFIG = FeedbackConfig()  # 自动反馈参数及单位见 lumos_auto_feedback.py
 # ================================================================
 
 
@@ -93,6 +99,7 @@ class HDButton:
         self.leader = leader
         self.id = button_id
         self.locked: bool | None = None
+        self.feedback = None
         if not leader.ping(button_id):
             raise RuntimeError(
                 f"HD 按钮板 ID {button_id} 未响应。请检查连接/ID；无按钮时加 --button-disable。"
@@ -105,6 +112,10 @@ class HDButton:
         locked = angle == 180.0
         if locked == self.locked:
             return
+        # 自动反馈启用时只记录按钮状态，由统一出口仲裁保持/阻尼，避免互相覆盖。
+        if self.feedback is not None:
+            self.locked = locked
+            return
         # Only affect the six arm joints; never lock the gripper or button board.
         for servo_id in LEADER_JOINT_IDS:
             self.leader.stop_on_control_mode(servo_id, 0x11 if locked else 0x10, 0x00)
@@ -113,12 +124,19 @@ class HDButton:
 
 
 def read_leader(leader, joint_map: Sequence[int], include_gripper: bool = False,
-                hd_button: HDButton | None = None) -> list[float]:
+                hd_button: HDButton | None = None, *, fresh=False) -> list[float]:
     ids = list(joint_map)
     if include_gripper:
         ids.append(6)
     monitor_ids = ids + ([hd_button.id] if hd_button is not None else [])
-    leader.send_sync_servo_monitor(monitor_ids)
+    if fresh:
+        # realtime=True 为未响应设备返回空状态，拒绝 SDK 默认的旧缓存回退。
+        monitors = leader.send_sync_servo_monitor(monitor_ids, realtime=True)
+        if any(monitors.get(i) is None or getattr(monitors[i], "angle_monitor", None) is None
+               or not math.isfinite(monitors[i].angle_monitor) for i in monitor_ids):
+            raise RuntimeError("主臂监测未收到完整有效反馈，停止遥操作")
+    else:
+        leader.send_sync_servo_monitor(monitor_ids)
     if hd_button is not None:
         hd_button.update()
     return [float(leader.servos[servo_id].angle_monitor) for servo_id in ids]
@@ -189,6 +207,8 @@ def main() -> int:
                         help="Reverse the calibrated gripper mapping if open/close moves the wrong way")
     parser.add_argument("--execute", action="store_true",
                         help="Send commands to Lumos; without this flag only print proposed targets")
+    parser.add_argument("--feedback-disable", action="store_true",
+                        help="Disable automatic Leader load feedback (enabled in execute mode)")
     parser.add_argument("--diagnostics-file", type=Path,
                         help="Save loop timing and joint targets to CSV for delay diagnosis")
     button_group = parser.add_mutually_exclusive_group()
@@ -200,6 +220,7 @@ def main() -> int:
     parser.add_argument("--button-id", "--button_id", type=int, choices=range(7, 254),
                         default=HD_BUTTON_ID, metavar="ID", help="HD button board ID, 7..253 (default: 7)")
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     # Keep user paths relative to the launch directory, not the SDK directory.
     args.calibration_file = args.calibration_file.expanduser().resolve()
     if args.diagnostics_file is not None:
@@ -225,6 +246,7 @@ def main() -> int:
     leader_uart = None
     lumos = None
     diagnostics_file = None
+    auto_feedback = None
     try:
         leader_uart = serial.Serial(
             port=args.leader_port,
@@ -360,6 +382,17 @@ def main() -> int:
                 "Lumos 当前姿态与校准参考姿态相差超过 0.15 rad。请摆回参考姿态或重新校准。"
             )
 
+        previous_gripper = None
+        if args.execute and not args.feedback_disable:
+            span = (float(gripper_range["open_deg"]) - float(gripper_range["closed_deg"])
+                    if args.gripper else None)
+            auto_feedback = LumosAutoFeedback(
+                leader, lumos, args.joint_map, gain=gain, gripper_span_deg=span,
+                config=AUTO_FEEDBACK_CONFIG,
+            )
+            if hd_button is not None:
+                hd_button.feedback = auto_feedback
+
         print("EXECUTE: 正在控制 Lumos" if args.execute else "预览模式：只显示目标，不驱动 Lumos")
         print(f"校准文件：{args.calibration_file}")
         print(f"固定参数：signs={list(JOINT_SIGNS)}, gain={FOLLOW_GAIN}, max_speed={MAX_SPEED_DEG_PER_SEC}°/秒, rate={CONTROL_RATE_HZ}Hz")
@@ -386,7 +419,8 @@ def main() -> int:
                                  + [f"target_j{i}_rad" for i in range(1, 7)])
         while True:
             loop_started = time.monotonic()
-            feedback = read_leader(leader, args.joint_map, args.gripper, hd_button)
+            feedback = read_leader(leader, args.joint_map, args.gripper, hd_button,
+                                   fresh=auto_feedback is not None)
             sample_time = time.monotonic()
             dt = period if last_sample is None else sample_time - last_sample
             last_sample = sample_time
@@ -400,10 +434,6 @@ def main() -> int:
             target = limit_target(previous_target, desired, dt)
 
             send_started = time.monotonic()
-            if args.execute:
-                lumos.set_joint_raw(target, [0.0] * 6)
-            previous_target = target
-
             line = f"leader_deg={[round(v, 1) for v in leader_deg]}"
             if hd_button is not None:
                 line += " HD=悬停" if hd_button.locked else " HD=释放"
@@ -415,8 +445,23 @@ def main() -> int:
                 if args.invert_gripper:
                     grip_ratio = 1.0 - grip_ratio
                 line += f" gripper={grip_ratio:.2f}"
-                if args.execute:
+
+            # 用上一帧已发送目标观察跟随情况；反馈异常时冻结新指令，保留最后目标供恢复判断。
+            feedback_ok = (auto_feedback is None or auto_feedback.update(
+                previous_target, gripper_target=previous_gripper,
+                manual_hold=bool(hd_button is not None and hd_button.locked),
+            ))
+            if args.execute and feedback_ok:
+                lumos.set_joint_raw(target, [0.0] * 6)
+                if args.gripper:
                     lumos.setGripperPosition(grip_ratio)
+                    previous_gripper = grip_ratio
+            if feedback_ok:
+                previous_target = target
+            else:
+                target = previous_target
+            if auto_feedback is not None:
+                line += f" feedback={auto_feedback.state}"
             send_finished = time.monotonic()
             work_ms = (send_finished - loop_started) * 1000.0
             target_error = math.degrees(max(abs(new - sent) for new, sent in zip(desired, target)))
@@ -454,6 +499,8 @@ def main() -> int:
         print(f"\n运行失败：{exc}", file=sys.stderr)
         return 1
     finally:
+        if auto_feedback is not None:
+            auto_feedback.close()
         if diagnostics_file is not None:
             diagnostics_file.close()
         if lumos is not None:

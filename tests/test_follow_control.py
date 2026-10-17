@@ -81,8 +81,12 @@ class FollowControlTests(unittest.TestCase):
                 teleop.JointFilter().update([bad] * 6, 0.02)
 
     def test_preview_and_execute_with_old_calibration_and_diagnostics(self):
-        for execute in (False, True):
-            with self.subTest(execute=execute), tempfile.TemporaryDirectory() as directory:
+        for execute, disable_feedback, bad_feedback in (
+            (False, False, False), (True, False, False),
+            (True, True, False), (True, False, True),
+        ):
+            with (self.subTest(execute=execute, disabled=disable_feedback, invalid=bad_feedback),
+                  tempfile.TemporaryDirectory() as directory):
                 directory = Path(directory)
                 calibration = directory / "calibration.json"
                 calibration.write_text(json.dumps({
@@ -101,18 +105,26 @@ class FollowControlTests(unittest.TestCase):
                 })
                 frames = 0
 
-                def monitor(ids):
+                def monitor(ids, realtime=False):
                     nonlocal frames
                     frames += 1
                     if frames > 20:
                         raise KeyboardInterrupt
                     for i in ids:
                         leader.servos[i].angle_monitor = 30.0 if i == 6 else frames * 0.5
+                    return {i: leader.servos[i] for i in ids}
 
                 leader.send_sync_servo_monitor = monitor
+                modes = []
+                leader.stop_on_control_mode = lambda *command: modes.append(command)
                 commands, grips, cleanups = [], [], []
                 arm = SimpleNamespace(
                     get_joint_positions=lambda: [0.0] * 6,
+                    get_joint_torques=lambda: [math.nan if bad_feedback else 0.0] * 6,
+                    get_gripper_state=lambda: SimpleNamespace(
+                        position=1/3, effort_nm=0.0, feedback_valid=True,
+                        feedback_age_ms=1.0, enabled=True, error_code=0,
+                    ),
                     set_joint_raw=lambda q, v: commands.append((q, v)),
                     setGripperPosition=lambda g: grips.append(g),
                     cleanup=lambda: cleanups.append(True),
@@ -131,6 +143,8 @@ class FollowControlTests(unittest.TestCase):
                         "--calibration-file", str(calibration), "--diagnostics-file", str(log)]
                 if execute:
                     argv.append("--execute")
+                if disable_feedback:
+                    argv.append("--feedback-disable")
                 with (patch.object(teleop, "load_sdk", return_value=(serial, sdk, lambda **kw: arm)),
                       patch.object(teleop.time, "monotonic", side_effect=now),
                       patch.object(teleop.time, "sleep"), patch("sys.argv", argv),
@@ -140,8 +154,9 @@ class FollowControlTests(unittest.TestCase):
                     rows = list(csv.DictReader(stream))
                 self.assertEqual(len(rows), 20)
                 self.assertTrue(all(float(row["read_ms"]) > 0 for row in rows))
-                self.assertEqual(len(commands), 20 if execute else 0)
-                self.assertEqual(len(grips), 20 if execute else 0)
+                sends = execute and not bad_feedback
+                self.assertEqual(len(commands), 20 if sends else 0)
+                self.assertEqual(len(grips), 20 if sends else 0)
                 self.assertTrue(all(abs(g - 1 / 3) < 1e-9 for g in grips))
                 previous = [0.0] * 6
                 for q, v in commands:
@@ -151,6 +166,10 @@ class FollowControlTests(unittest.TestCase):
                     previous = q
                 self.assertFalse(uart.is_open)
                 self.assertEqual(cleanups, [True])
+                self.assertEqual({i for i, mode, power in modes if mode == 0x10},
+                                 set(range(7)) if execute and not disable_feedback else set())
+                if bad_feedback:
+                    self.assertEqual(sum(mode == 0x11 for i, mode, power in modes), 7)
 
 
 if __name__ == "__main__":
