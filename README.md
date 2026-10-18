@@ -4,8 +4,6 @@
 
 程序通过 Star Arm UART 和 Lumos CAN 通信，不依赖 LeRobot。客户操作步骤见 [操作指南](docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx)。
 
-执行模式已集成 Lumos 负载反馈：自动调节主臂阻尼、确认堵转后保持、恢复后释放，并与 HD 按钮统一仲裁。核心代码含中文注释，见 [lumos_auto_feedback.py](lumos_auto_feedback.py)；接入逻辑、参数及升级步骤见 [自动反馈教程](docs/auto_feedback.md)。
-
 ## 硬件与环境
 
 - Ubuntu 20.04 / 22.04 / 24.04 主机
@@ -136,7 +134,6 @@ python stararm102_lumos_teleop.py --can can0 --leader-port /dev/ttyUSB0 --grippe
 | `--gripper` | 不控制夹爪 | 启用 StarArm 舵机 6 到 Lumos 夹爪的映射。启用后校准会记录开合范围；校准、预览和执行时须使用相同设置。 |
 | `--invert-gripper` | 不反转 | 反转夹爪开合方向。主臂闭合而从臂张开时使用；只有启用 `--gripper` 才有作用，不改变六个关节的方向。 |
 | `--execute` | 预览模式 | 向 Lumos 下发关节和可选夹爪目标。不带此参数只显示目标；预览仍会连接 SDK，默认开启的 HD 按钮也仍控制主臂锁定/释放。 |
-| `--feedback-disable` | 执行时自动开启反馈 | 关闭自动负载反馈，使用原有跟随与 HD 按钮控制。用于接口兼容性排查；预览和校准本来就不启用自动反馈。 |
 | `--diagnostics-file outputs/teleop-diagnostics.csv` | 不保存日志 | 将循环耗时、输入角度和目标写入 CSV，用于排查延迟与抖动。可在预览和执行时使用；校准模式不生成此日志。每次运行覆盖指定文件。 |
 | `--button-enable` | 已开启 | 显式启用 HD 主臂按钮控制。也支持 `--button_enable`。 |
 | `--button-disable` | 不关闭按钮 | 无按钮板的主臂使用此参数；它与 `--button-enable` 不能同时使用。也支持 `--button_disable`。 |
@@ -152,7 +149,7 @@ python stararm102_lumos_teleop.py --can can0 --leader-port /dev/ttyUSB0 --grippe
 
 ## HD 按钮悬停
 
-HD 实体按钮功能默认开启，按钮板 ID 默认是 `7`。按钮反馈为 `180°` 时保持主臂六个关节，夹爪不参与 HD 保持。执行模式的自动反馈启用后，按钮与自动反馈统一下发模式：松开按钮时，仅在自动堵转和反馈故障均已解除后恢复阻尼，不会覆盖自动保持。预览、校准或关闭自动反馈时，按钮仍按原有方式切换保持/释放。程序显示 `HD=悬停` 或 `HD=释放`；执行模式另显示 `feedback` 作为实际反馈状态。校准采集和遥操作循环均会读取按钮。
+HD 实体按钮功能默认开启，按钮板 ID 默认是 `7`。按钮反馈为 `180°` 时锁定主臂六个关节，其他状态释放，夹爪不参与锁定。程序在按钮状态变化时发送锁定/释放指令，并显示 `HD=悬停` 或 `HD=释放`。校准采集和遥操作循环均会读取按钮。
 
 按钮功能在预览模式也生效；`--execute` 仅控制是否向 Lumos 下发跟随目标。按钮板未响应时程序会报错退出。
 
@@ -215,7 +212,6 @@ CSV 包含采样间隔、主臂读取与目标下发耗时、目标差值、六�
 ```text
 .
 ├── stararm102_lumos_teleop.py
-├── lumos_auto_feedback.py
 ├── scripts/
 │   └── install_ubuntu.sh
 ├── README.md
@@ -243,6 +239,6 @@ CSV 包含采样间隔、主臂读取与目标下发耗时、目标差值、六�
 
 原有校准文件、关节映射、关节方向和夹爪开合映射可继续使用；HD 按钮功能在本次更新中加入并默认开启，无按钮板时需要加 `--button-disable`。仍需 `--execute` 才会向 Lumos 下发跟随目标。
 
-升级时同时更新本仓库的 `stararm102_lumos_teleop.py` 和 `lumos_auto_feedback.py`，两份文件放在同一目录；有 HD 按钮的配置可继续使用原有命令，无按钮板时增加 `--button-disable`。SDK 无法自动定位时增加 `--sdk-root`；需要记录现场数据时增加 `--diagnostics-file`。旧版中的 `MAX_STEP_DEG` 已替换为速度上限与单帧步长上限，之前自行调整过该常量的用户需要在新版顶部重新核对设置。
+升级时替换为本仓库最新版 `stararm102_lumos_teleop.py`；有 HD 按钮的配置可继续使用原有命令，无按钮板时增加 `--button-disable`。SDK 无法自动定位时增加 `--sdk-root`；需要记录现场数据时增加 `--diagnostics-file`。旧版中的 `MAX_STEP_DEG` 已替换为速度上限与单帧步长上限，之前自行调整过该常量的用户需要在新版顶部重新核对设置。
 
 本版本已通过模拟测试，尚不能据此保证实机延迟或抖动完全消失，也不会自动提高默认跟随速度。
