@@ -4,6 +4,35 @@
 
 程序通过 Star Arm UART 和 Lumos CAN 通信，不依赖 LeRobot。客户操作步骤见 [操作指南](docs/StarArm102_Lumos_Python_Teleoperation_Guide.docx)。
 
+## 新增代码：SDK 封装与单臂 demo
+
+| 文件 | 用途 | 与主从遥操作的关系 |
+| --- | --- | --- |
+| [lumos_arm.py](lumos_arm.py) | 封装 StarTouch SDK 0.1.9 的连接与释放、六轴状态、跟随误差、末端位姿与 IK、关节路点、末端路径、夹爪和重力补偿接口。运动规划和硬件保护仍由原 SDK 执行。 | 提供可复用的 Lumos 单臂接口；尚未替换现有主从控制循环。 |
+| [lumos_sdk_demo.py](lumos_sdk_demo.py) | 使用 `LumosArm` 单独查看 Lumos 反馈，预览或执行小幅关节、末端直线及夹爪动作。 | 只连接 Lumos，不读取 StarArm，也不执行主从映射。 |
+
+安装依赖后，可在仓库根目录运行 demo。默认 `status` 会等待 2 秒，再显示六轴位置、速度、力矩和末端位姿；`ik` 用当前位姿检查逆运动学：
+
+```bash
+python lumos_sdk_demo.py
+python lumos_sdk_demo.py --action ik
+python lumos_sdk_demo.py --help
+```
+
+`joint`、`linear`、`gripper` 不带 `--execute` 时只打印目标；下面分别演示 J1 相对当前姿态移动 2°、末端沿 Z 方向移动 5 mm、夹爪打开到归一化开度 1：
+
+```bash
+python lumos_sdk_demo.py --action joint --joint 1 --delta-deg 2 --execute
+python lumos_sdk_demo.py --action linear --delta-z-mm 5 --execute
+python lumos_sdk_demo.py --action gripper --gripper --gripper-position 1 --execute
+```
+
+demo 的关节增量范围是 ±20°；关节和直线路径按位移请求至少 2 秒的轨迹时长。夹爪执行时会显示起始开度，并等待最多 5 秒取得到位反馈；超时会打印最后一次反馈，可用 `--gripper-timeout` 调整等待时间。`--gripper` 仅表示连接时启用夹爪；`--execute` 必须配合具体 `--action`，不匹配的参数会在连接前报错。
+
+**连接 StarTouch SDK 本身会使能电机，预览模式也一样。**demo 在六轴状态全零时会阻止关节或末端执行；仅在确认实物确处于零位后才使用 `--allow-zero-state`。真机运行前确认急停和工作空间。
+
+接口详情见 [中文 API 说明](docs/Lumos_SDK_API.md)、[与原 SDK 的逐项对应和功能覆盖表](docs/Lumos_SDK_Mapping.md)及 [SDK 0.1.9 完整 API 文档快照](docs/StarTouch_SDK_API_0.1.9.md)。
+
 ## 硬件与环境
 
 - Ubuntu 20.04 / 22.04 / 24.04 主机
@@ -212,10 +241,19 @@ CSV 包含采样间隔、主臂读取与目标下发耗时、目标差值、六�
 ```text
 .
 ├── stararm102_lumos_teleop.py
+├── lumos_arm.py
+├── lumos_sdk_demo.py
 ├── scripts/
 │   └── install_ubuntu.sh
 ├── README.md
+├── tests/
+│   ├── test_follow_control.py
+│   ├── test_lumos_arm.py
+│   └── test_lumos_sdk_demo.py
 └── docs/
+    ├── Lumos_SDK_API.md
+    ├── Lumos_SDK_Mapping.md
+    ├── StarTouch_SDK_API_0.1.9.md
     └── StarArm102_Lumos_Python_Teleoperation_Guide.docx
 ```
 
